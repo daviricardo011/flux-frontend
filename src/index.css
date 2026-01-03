@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Fundo OLED Puro (#050505) */
+    --background: 0 0% 2%;
+    --foreground: 0 0% 100%;
+
+    /* Cartões: ligeiramente mais claros para criar profundidade, mas muito subtis */
+    --card: 0 0% 4%; 
+    --card-foreground: 0 0% 100%;
+ 
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 100%;
+ 
+    /* Primary: Neon Lime (#CCFF00) */
+    --primary: 72 100% 50%;
+    --primary-foreground: 0 0% 0%; /* Texto preto para alto contraste no Lime */
+ 
+    /* Secondary: Soft Violet (#8B5CF6) */
+    --secondary: 258 90% 66%;
+    --secondary-foreground: 0 0% 100%;
+ 
+    /* Muted: Cinzas escuros para elementos secundários */
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 60%;
+ 
+    /* Accent: Bio Cyan (#22D3EE) - Usado no módulo de saúde */
+    --accent: 188 86% 53%;
+    --accent-foreground: 0 0% 0%;
+ 
+    /* Destructive: Vermelho dessaturado */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Bordas e Inputs: Muito subtis para o glass effect */
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    
+    /* Ring: O brilho de foco segue a cor primária */
+    --ring: 72 100% 50%;
+ 
+    --radius: 0.75rem; /* Bordas arredondadas modernas (12px) */
+  }
+ 
+  .dark {
+    /* Como o app é nativamente Dark, mantemos os mesmos valores ou ajustamos se necessário */
+    --background: 0 0% 2%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 72 100% 50%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 258 90% 66%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 188 86% 53%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 72 100% 50%;
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary selection:text-black;
+  }
+}
+
+/* Utilitários Personalizados do FLUX */
+@layer utilities {
+  /* Ocultar scrollbar mas permitir scroll (Chrome/Safari/Opera) */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Ocultar scrollbar (IE, Edge e Firefox) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  /* Efeito de Vidro Padrão */
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 shadow-lg;
+  }
+
+  /* Efeito de Vidro Hover (Interativo) */
+  .glass-hover {
+    @apply hover:bg-white/10 hover:border-white/20 transition-all duration-300;
+  }
+  
+  /* Efeito de Vidro Intenso (Modais/Popovers) */
+  .glass-heavy {
+    @apply bg-black/60 backdrop-blur-xl border border-white/10;
+  }
+
+  /* Texto com gradiente (ex: Logo) */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  }
+}
