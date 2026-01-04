@@ -103,7 +103,7 @@
   
   /* Efeito de Vidro Intenso (Modais/Popovers) */
   .glass-heavy {
-    @apply bg-black/5 backdrop-blur-lg border border-white/10 shadow-lg;
+    @apply bg-black/75 backdrop-blur-lg border border-white/10 shadow-lg;
   }
 
   /* Texto com gradiente (ex: Logo) */

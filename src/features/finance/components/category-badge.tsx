@@ -17,7 +17,6 @@ export function CategoryBadge({
 }: CategoryBadgeProps) {
   // 1. Procura a configuração da categoria (cor/ícone) na lista
   const category = categories?.find((c) => c.name === categoryName);
-  console.log(categories);
 
   // 2. Busca o componente do ícone usando sua lib existente
   // Se não tiver categoria (ex: apagada), usa DollarSign como padrão

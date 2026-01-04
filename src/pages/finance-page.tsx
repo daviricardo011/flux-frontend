@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
@@ -51,6 +53,7 @@ import type { Transaction, TransactionType } from "@/features/finance/types";
 import { useAuth } from "@/features/auth/auth";
 import { BillsView } from "@/features/finance/components/bills-view";
 import { GoalsView } from "@/features/finance/components/goals-view";
+import { CardsView } from "@/features/finance/components/cards-view"; // <--- Importando Cartões
 
 const getLocalToday = () => {
   const local = new Date();
@@ -359,21 +362,27 @@ export function FinancePage() {
           <TabsList className="glass w-full md:w-auto p-1 border border-white/10 h-auto">
             <TabsTrigger
               value="transactions"
-              className="px-6 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
+              className="px-4 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
             >
               Movimentações
             </TabsTrigger>
             <TabsTrigger
               value="bills"
-              className="px-6 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
+              className="px-4 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
             >
-              Contas Fixas
+              Contas
             </TabsTrigger>
             <TabsTrigger
               value="goals"
-              className="px-6 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
+              className="px-4 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
             >
               Metas
+            </TabsTrigger>
+            <TabsTrigger
+              value="cards"
+              className="px-4 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
+            >
+              Cartões
             </TabsTrigger>
           </TabsList>
 
@@ -616,9 +625,14 @@ export function FinancePage() {
           <BillsView />
         </TabsContent>
 
-        {/* 3. Metas (Goals) - NOVA ABA */}
+        {/* 3. Metas (Goals) */}
         <TabsContent value="goals" className="mt-0">
           <GoalsView />
+        </TabsContent>
+
+        {/* 4. Cartões */}
+        <TabsContent value="cards" className="mt-0">
+          <CardsView transactions={transactions} />{" "}
         </TabsContent>
       </Tabs>
 
@@ -668,7 +682,6 @@ export function FinancePage() {
                 Despesa
               </Button>
             </div>
-            {/* Campos do Form */}
             <div className="space-y-2">
               <Label>Descrição</Label>
               <div className="relative">
