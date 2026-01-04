@@ -1,4 +1,4 @@
- import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   DollarSign,
@@ -11,7 +11,7 @@ import {
   X,
   Edit2,
   Trash2,
-  AlertTriangle, // Novo ícone para alerta
+  AlertTriangle,
 } from "lucide-react";
 
 // UI Components
@@ -23,6 +23,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
@@ -43,6 +44,7 @@ import {
 import { BalanceHeader } from "@/features/finance/components/balance-header";
 import { TransactionList } from "@/features/finance/components/transaction-list";
 import { TransactionTable } from "@/features/finance/components/transaction-table";
+import { PaginationControls } from "@/features/finance/components/pagination-controls"; // <--- NOVO COMPONENTE
 import { TransactionService } from "@/services/transaction-service";
 import { CategoryService, type Category } from "@/services/category-service";
 import type { Transaction, TransactionType } from "@/features/finance/types";
@@ -63,12 +65,16 @@ export function FinancePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Paginação (Novos Estados)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   // Seleção e Bulk Actions
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [bulkEditField, setBulkEditField] = useState<
     "category" | "date" | "amount" | "description"
-  >("category"); // Removido "type" daqui
+  >("category");
   const [bulkEditValue, setBulkEditValue] = useState("");
 
   // Filtros
@@ -168,22 +174,41 @@ export function FinancePage() {
     filterMaxVal,
   ]);
 
-  // --- LÓGICA DE SELEÇÃO E VALIDAÇÃO DE TIPOS ---
+  // --- LÓGICA DE PAGINAÇÃO ---
 
-  // Recupera os objetos completos das transações selecionadas
+  // 1. Resetar para página 1 se os filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    filterType,
+    filterCategory,
+    filterDateStart,
+    filterDateEnd,
+    filterMinVal,
+    filterMaxVal,
+  ]);
+
+  // 2. Calcular dados paginados
+  const totalItems = filteredTransactions.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+  const paginatedTransactions = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredTransactions.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredTransactions, currentPage, itemsPerPage]);
+
+  // --- LÓGICA DE SELEÇÃO E VALIDAÇÃO DE TIPOS ---
   const selectedTransactions = useMemo(() => {
     return transactions.filter((t) => selectedIds.includes(t.id!));
   }, [transactions, selectedIds]);
 
-  // Verifica se há tipos misturados na seleção (Ex: Receita E Despesa juntos)
   const hasMixedTypes = useMemo(() => {
     if (selectedTransactions.length === 0) return false;
     const firstType = selectedTransactions[0].type;
     return !selectedTransactions.every((t) => t.type === firstType);
   }, [selectedTransactions]);
 
-  // Define qual lista de categorias mostrar no Bulk Edit
-  // Se não for misto, pega o tipo do primeiro item. Se for misto, array vazio.
   const bulkEditCategories = useMemo(() => {
     if (hasMixedTypes || selectedTransactions.length === 0) return [];
     const type = selectedTransactions[0].type;
@@ -199,6 +224,7 @@ export function FinancePage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
+      // ATENÇÃO: Seleciona apenas o que está visível/filtrado (não só a página atual, mas todos filtrados)
       setSelectedIds(filteredTransactions.map((t) => t.id!));
     } else {
       setSelectedIds([]);
@@ -216,7 +242,6 @@ export function FinancePage() {
 
   const handleBulkUpdate = async () => {
     if (!bulkEditValue) return alert("Selecione um valor");
-
     setIsSubmitting(true);
     try {
       const updates: any = {};
@@ -301,12 +326,9 @@ export function FinancePage() {
     }
   };
 
-  // Categorias para o modal individual
   const availableCategories = categories.filter(
     (cat) => cat.type === formData.type
   );
-
-  // Categorias para o filtro da tela
   const filterCategoriesList = categories.filter(
     (cat) => filterType === "all" || cat.type === filterType
   );
@@ -546,25 +568,39 @@ export function FinancePage() {
                 </Button>
               )}
             </div>
-          ) : view === "list" ? (
-            <TransactionList
-              data={filteredTransactions}
-              categories={categories}
-              onDelete={TransactionService.deleteTransaction}
-              onEdit={handleOpenEdit}
-              selectedIds={selectedIds}
-              onSelect={handleSelect}
-            />
           ) : (
-            <TransactionTable
-              data={filteredTransactions}
-              categories={categories}
-              selectedIds={selectedIds}
-              onSelect={handleSelect}
-              onSelectAll={handleSelectAll}
-              onEdit={handleOpenEdit}
-              onDelete={TransactionService.deleteTransaction}
-            />
+            <>
+              {view === "list" ? (
+                <TransactionList
+                  data={paginatedTransactions} // <--- USA DADOS PAGINADOS
+                  categories={categories}
+                  onDelete={TransactionService.deleteTransaction}
+                  onEdit={handleOpenEdit}
+                  selectedIds={selectedIds}
+                  onSelect={handleSelect}
+                />
+              ) : (
+                <TransactionTable
+                  data={paginatedTransactions} // <--- USA DADOS PAGINADOS
+                  categories={categories}
+                  selectedIds={selectedIds}
+                  onSelect={handleSelect}
+                  onSelectAll={handleSelectAll}
+                  onEdit={handleOpenEdit}
+                  onDelete={TransactionService.deleteTransaction}
+                />
+              )}
+
+              {/* PAGINAÇÃO */}
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                itemsPerPage={itemsPerPage}
+                totalItems={totalItems}
+                onPageChange={setCurrentPage}
+                onItemsPerPageChange={setItemsPerPage}
+              />
+            </>
           )}
         </TabsContent>
 
@@ -576,6 +612,7 @@ export function FinancePage() {
       {/* --- MODAL CRIAR / EDITAR (INDIVIDUAL) --- */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="glass-heavy border-white/10 text-white sm:max-w-[425px]">
+          {/* ... (Mesmo conteúdo do modal anterior) ... */}
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Editar Transação" : "Nova Transação"}
@@ -590,7 +627,7 @@ export function FinancePage() {
             <div className="flex gap-2 p-1 bg-white/5 rounded-lg border border-white/5">
               <Button
                 type="button"
-                disabled={!!editingId} // <--- BLOQUEIA TROCA DE TIPO NA EDIÇÃO
+                disabled={!!editingId}
                 variant="ghost"
                 onClick={() =>
                   setFormData((p) => ({ ...p, type: "income", category: "" }))
@@ -605,7 +642,7 @@ export function FinancePage() {
               </Button>
               <Button
                 type="button"
-                disabled={!!editingId} // <--- BLOQUEIA TROCA DE TIPO NA EDIÇÃO
+                disabled={!!editingId}
                 variant="ghost"
                 onClick={() =>
                   setFormData((p) => ({ ...p, type: "expense", category: "" }))
@@ -746,12 +783,9 @@ export function FinancePage() {
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <Label>Novo Valor</Label>
-
               {bulkEditField === "category" ? (
-                /* VALIDAÇÃO DE CATEGORIA MISTA */
                 hasMixedTypes ? (
                   <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
@@ -794,7 +828,6 @@ export function FinancePage() {
                 />
               )}
             </div>
-
             <Button
               onClick={handleBulkUpdate}
               disabled={
