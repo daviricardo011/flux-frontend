@@ -1,5 +1,3 @@
- ;
-
 import { useState, useEffect } from "react";
 import { Plus, DollarSign, AlignLeft, Loader2 } from "lucide-react";
 
@@ -34,6 +32,14 @@ import type { Transaction, TransactionType } from "@/features/finance/types";
 import { useAuth } from "@/features/auth/auth";
 import { BillsView } from "@/features/finance/components/bills-view";
 
+// --- HELPERS ---
+// Garante a data local correta (YYYY-MM-DD) sem problemas de fuso
+const getLocalToday = () => {
+  const local = new Date();
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+  return local.toISOString().split("T")[0];
+};
+
 export function FinancePage() {
   const { user } = useAuth();
 
@@ -49,15 +55,17 @@ export function FinancePage() {
   // Estado do Modal de Nova Transação
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Estado do Formulário (Inicializado com data local correta)
   const [newTransaction, setNewTransaction] = useState({
     description: "",
     amount: "",
     type: "expense" as TransactionType,
     category: "",
-    date: new Date().toISOString().split("T")[0],
+    date: getLocalToday(), // <--- CORREÇÃO DE FUSO
   });
 
-  // Carregar Dados
+  // Carregar Dados (BLINDADO)
   useEffect(() => {
     if (!user) return;
 
@@ -87,9 +95,10 @@ export function FinancePage() {
 
     fetchCats();
 
+    // Limpeza ao desmontar
     return () => {
       isMounted = false;
-      unsubscribeTransactions(); // Encerra a conexão
+      unsubscribeTransactions(); 
     };
   }, [user]);
 
@@ -114,12 +123,13 @@ export function FinancePage() {
         date: newTransaction.date,
       });
 
+      // Reset do form (mantendo data local correta)
       setNewTransaction({
         description: "",
         amount: "",
         type: "expense",
         category: "",
-        date: new Date().toISOString().split("T")[0],
+        date: getLocalToday(), // <--- CORREÇÃO DE FUSO
       });
       setIsModalOpen(false);
     } catch (error) {
@@ -135,11 +145,13 @@ export function FinancePage() {
 
   return (
     <div className="space-y-8 pb-20 md:pb-0 animate-in fade-in duration-500">
+      
       {/* 1. Header com Saldo e Gráfico */}
       <BalanceHeader transactions={transactions} />
 
       {/* 2. Sistema de Abas Principal */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        
         {/* Cabeçalho das Abas */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
           <TabsList className="glass w-full md:w-auto p-1 border border-white/10 h-auto">
@@ -177,7 +189,7 @@ export function FinancePage() {
                     <Plus className="w-4 h-4 mr-2" /> Nova Transação
                   </Button>
                 </DialogTrigger>
-                {/* ... (Conteúdo do Modal igual ao anterior, omitido para economizar espaço, mas mantenha o seu código aqui) ... */}
+                
                 <DialogContent className="glass-heavy border-white/10 text-white sm:max-w-[425px]">
                   <DialogHeader>
                     <DialogTitle>Adicionar Movimentação</DialogTitle>
@@ -185,7 +197,9 @@ export function FinancePage() {
                       Preencha os dados abaixo.
                     </DialogDescription>
                   </DialogHeader>
+                  
                   <div className="grid gap-5 py-4">
+                    {/* Botões de Tipo */}
                     <div className="flex gap-2 p-1 bg-white/5 rounded-lg border border-white/5">
                       <Button
                         type="button"
@@ -194,13 +208,14 @@ export function FinancePage() {
                           setNewTransaction((prev) => ({
                             ...prev,
                             type: "income",
-                            category: "",
+                            category: "", // Limpa categoria ao trocar tipo
+                            // Mantém a data selecionada (prev.date)
                           }))
                         }
-                        className={`flex-1 ${
+                        className={`flex-1 transition-all ${
                           newTransaction.type === "income"
-                            ? "bg-[#CCFF00] text-black"
-                            : "text-white/60"
+                            ? "bg-[#CCFF00] text-black shadow-lg font-bold"
+                            : "text-white/60 hover:text-white"
                         }`}
                       >
                         Receita
@@ -212,47 +227,58 @@ export function FinancePage() {
                           setNewTransaction((prev) => ({
                             ...prev,
                             type: "expense",
-                            category: "",
+                            category: "", // Limpa categoria ao trocar tipo
+                            // Mantém a data selecionada (prev.date)
                           }))
                         }
-                        className={`flex-1 ${
+                        className={`flex-1 transition-all ${
                           newTransaction.type === "expense"
-                            ? "bg-red-500 text-white"
-                            : "text-white/60"
+                            ? "bg-red-500 text-white shadow-lg font-bold"
+                            : "text-white/60 hover:text-white"
                         }`}
                       >
                         Despesa
                       </Button>
                     </div>
+
+                    {/* Descrição */}
                     <div className="space-y-2">
                       <Label>Descrição</Label>
-                      <Input
-                        placeholder="Ex: Mercado"
-                        className="bg-black/40 border-white/10 text-white"
-                        value={newTransaction.description}
-                        onChange={(e) =>
-                          setNewTransaction({
-                            ...newTransaction,
-                            description: e.target.value,
-                          })
-                        }
-                      />
+                      <div className="relative">
+                        <AlignLeft className="absolute left-3 top-2.5 h-4 w-4 text-white/40" />
+                        <Input
+                            placeholder="Ex: Mercado, Salário..."
+                            className="pl-9 bg-black/40 border-white/10 text-white placeholder:text-white/20"
+                            value={newTransaction.description}
+                            onChange={(e) =>
+                            setNewTransaction({
+                                ...newTransaction,
+                                description: e.target.value,
+                            })
+                            }
+                        />
+                      </div>
                     </div>
+
+                    {/* Valor e Data */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Valor</Label>
-                        <Input
-                          type="number"
-                          placeholder="0.00"
-                          className="bg-black/40 border-white/10 text-white"
-                          value={newTransaction.amount}
-                          onChange={(e) =>
-                            setNewTransaction({
-                              ...newTransaction,
-                              amount: e.target.value,
-                            })
-                          }
-                        />
+                        <div className="relative">
+                            <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-white/40" />
+                            <Input
+                            type="number"
+                            placeholder="0.00"
+                            className="pl-9 bg-black/40 border-white/10 text-white placeholder:text-white/20"
+                            value={newTransaction.amount}
+                            onChange={(e) =>
+                                setNewTransaction({
+                                ...newTransaction,
+                                amount: e.target.value,
+                                })
+                            }
+                            />
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label>Data</Label>
@@ -269,6 +295,8 @@ export function FinancePage() {
                         />
                       </div>
                     </div>
+
+                    {/* Categoria */}
                     <div className="space-y-2">
                       <Label>Categoria</Label>
                       <Select
@@ -284,24 +312,36 @@ export function FinancePage() {
                           <SelectValue placeholder="Selecione..." />
                         </SelectTrigger>
                         <SelectContent className="bg-[#0a0a0a] border-white/10 text-white">
-                          {availableCategories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.name}>
-                              {cat.name}
-                            </SelectItem>
-                          ))}
+                          {availableCategories.length === 0 ? (
+                             <SelectItem value="none" disabled>
+                                {categories.length === 0 
+                                    ? "Crie categorias em Configurações" 
+                                    : `Sem categorias de ${newTransaction.type === 'income' ? 'receita' : 'despesa'}`}
+                             </SelectItem>
+                          ) : (
+                              availableCategories.map((cat) => (
+                                <SelectItem key={cat.id} value={cat.name}>
+                                  {cat.name}
+                                </SelectItem>
+                              ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
+
                   <Button
                     onClick={handleSave}
                     disabled={isSubmitting}
-                    className="w-full bg-[#CCFF00] text-black font-bold"
+                    className="w-full bg-[#CCFF00] text-black hover:bg-[#b3e600] font-bold h-11"
                   >
                     {isSubmitting ? (
-                      <Loader2 className="animate-spin" />
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Salvando...
+                      </>
                     ) : (
-                      "Salvar"
+                      "Salvar Transação"
                     )}
                   </Button>
                 </DialogContent>
