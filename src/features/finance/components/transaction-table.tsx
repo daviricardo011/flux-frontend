@@ -12,12 +12,18 @@ import { TrendingUp, TrendingDown, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TransactionService } from "@/services/transaction-service";
 import type { Transaction } from "../types";
+import type { Category } from "@/services/category-service";
+import { CategoryBadge } from "@/features/finance/components/category-badge";
 
 interface TransactionTableProps {
   data?: Transaction[];
+  categories: Category[];
 }
 
-export function TransactionTable({ data = [] }: TransactionTableProps) {
+export function TransactionTable({
+  data = [],
+  categories = [],
+}: TransactionTableProps) {
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
     const date = new Date(`${dateString}T12:00:00`);
@@ -54,9 +60,10 @@ export function TransactionTable({ data = [] }: TransactionTableProps) {
                 </TableCell>
                 <TableCell className="text-white">{t.description}</TableCell>
                 <TableCell>
-                  <span className="px-2 py-1 rounded-full text-xs bg-white/10 text-white/70 border border-white/10">
-                    {t.category}
-                  </span>
+                  <CategoryBadge
+                    categoryName={t.category}
+                    categories={categories}
+                  />
                 </TableCell>
                 <TableCell className="text-right">
                   <span

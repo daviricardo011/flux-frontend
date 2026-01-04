@@ -1,18 +1,24 @@
-import { ArrowUpCircle, ArrowDownCircle, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Transaction } from "../types";
 import { Button } from "@/components/ui/button";
+import type { Category } from "@/services/category-service";
+import { CategoryBadge } from "./category-badge";
 
 interface TransactionListProps {
   data: Transaction[];
+  categories: Category[];
   onDelete: (id: string) => void;
 }
 
-export function TransactionList({ data, onDelete }: TransactionListProps) {
+export function TransactionList({
+  data,
+  categories = [],
+  onDelete,
+}: TransactionListProps) {
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
-    // Força meio-dia para evitar bug de dia anterior
     const date = new Date(`${dateString}T12:00:00`);
     return format(date, "dd/MM/yyyy", { locale: ptBR });
   };
@@ -25,19 +31,14 @@ export function TransactionList({ data, onDelete }: TransactionListProps) {
           className="flex items-center justify-between p-4 rounded-xl glass border border-white/5 hover:border-white/20 transition-all group"
         >
           <div className="flex items-center gap-4">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                transaction.type === "income"
-                  ? "bg-[#CCFF00]/10 text-[#CCFF00]"
-                  : "bg-red-500/10 text-red-500"
-              }`}
-            >
-              {transaction.type === "income" ? (
-                <ArrowUpCircle className="w-6 h-6" />
-              ) : (
-                <ArrowDownCircle className="w-6 h-6" />
-              )}
-            </div>
+            {/* Ícone Grande usando a cor da categoria */}
+            <CategoryBadge
+              categoryName={transaction.category}
+              categories={categories}
+              size="md"
+              showLabel={false}
+            />
+
             <div>
               <h4 className="font-bold text-white">
                 {transaction.description}

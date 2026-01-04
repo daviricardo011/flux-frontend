@@ -25,11 +25,7 @@ export function BalanceHeader({ transactions }: BalanceHeaderProps) {
     const now = new Date();
     const lastMonth = subMonths(now, 1);
 
-    // 1. Cálculos de Saldo e Totais
-    const totalBalance = transactions.reduce((acc, t) => {
-      return acc + (t.type === "income" ? Number(t.amount) : -Number(t.amount));
-    }, 0);
-
+    // 1. Cálculos de Totais (Receita/Despesa/Saldo Atual)
     const totalIncome = transactions
       .filter((t) => t.type === "income")
       .reduce((acc, t) => acc + Number(t.amount), 0);
@@ -38,41 +34,55 @@ export function BalanceHeader({ transactions }: BalanceHeaderProps) {
       .filter((t) => t.type === "expense")
       .reduce((acc, t) => acc + Number(t.amount), 0);
 
-    // 2. Saldo mês anterior
+    const currentBalance = totalIncome - totalExpense;
+
+    // 2. Saldo mês anterior (para variação percentual)
     const lastMonthEnd = endOfMonth(lastMonth);
-    const prevBalance = transactions
-      .filter((t) => isBefore(new Date(t.date), lastMonthEnd))
-      .reduce((acc, t) => {
-        return (
-          acc + (t.type === "income" ? Number(t.amount) : -Number(t.amount))
-        );
-      }, 0);
+    const prevTransactions = transactions.filter((t) => 
+      isBefore(new Date(t.date), lastMonthEnd)
+    );
+    
+    const prevBalance = prevTransactions.reduce((acc, t) => {
+      return acc + (t.type === "income" ? Number(t.amount) : -Number(t.amount));
+    }, 0);
 
     // 3. Variação Percentual
-    const percentChange =
-      prevBalance === 0
-        ? 0
-        : ((totalBalance - prevBalance) / Math.abs(prevBalance)) * 100;
+    const percentChange = prevBalance === 0
+      ? 0
+      : ((currentBalance - prevBalance) / Math.abs(prevBalance)) * 100;
 
-    // 4. Gráfico (ALTERADO AQUI)
-    const sparkData = transactions
-      .slice(0, 20)
-      .reverse()
-      .map((t) => ({
-        value: Number(t.amount) * (t.type === "expense" ? -1 : 1),
-        // Formata para "jan/24" ou similar
-        date: new Date(t.date).toLocaleDateString("pt-BR", { 
-            month: "short", 
-            year: "numeric" 
-        })
-      }));
+    // 4. Gráfico de Tendência de SALDO (Running Balance)
+    // Ordenar cronologicamente: Antigas -> Recentes
+    const sortedTransactions = [...transactions].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
 
-    const chartData = sparkData.length > 0 
-        ? sparkData 
-        : [{ value: 0, date: "" }];
+    let runningBalance = 0;
+    const balanceHistory = sortedTransactions.map((t) => {
+      const amount = Number(t.amount);
+      if (t.type === "income") {
+        runningBalance += amount;
+      } else {
+        runningBalance -= amount;
+      }
+
+      return {
+        value: runningBalance, // O valor no gráfico é o saldo acumulado naquele momento
+        date: new Date(t.date).toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "short",
+        }),
+      };
+    });
+
+    // Pegamos os últimos 20 pontos para o gráfico não ficar polúido
+    // Se quiser o histórico todo, remova o .slice
+    const chartData = balanceHistory.length > 0 
+      ? balanceHistory.slice(-20) 
+      : [{ value: 0, date: "" }];
 
     return {
-      totalBalance,
+      totalBalance: currentBalance,
       totalIncome,
       totalExpense,
       percentChange,
@@ -87,7 +97,7 @@ export function BalanceHeader({ transactions }: BalanceHeaderProps) {
     <div className="glass rounded-2xl p-6 md:p-8 border border-white/10">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
         <div className="flex-1">
-          {/* Tooltip de Detalhes do Saldo */}
+          {/* Tooltip de Detalhes */}
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
@@ -95,7 +105,7 @@ export function BalanceHeader({ transactions }: BalanceHeaderProps) {
                   <div className="w-10 h-10 rounded-xl bg-[#CCFF00]/10 flex items-center justify-center transition-colors hover:bg-[#CCFF00]/20">
                     <DollarSign className="w-5 h-5 text-[#CCFF00]" />
                   </div>
-                  <p className="text-sm text-white/60">Saldo Total</p>
+                  <p className="text-sm text-white/60">Saldo Atual</p>
                 </div>
               </TooltipTrigger>
               <TooltipContent
@@ -128,7 +138,6 @@ export function BalanceHeader({ transactions }: BalanceHeaderProps) {
               {formatMoney(stats.totalBalance)}
             </h1>
 
-            {/* Tooltip de Variação Percentual */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -163,9 +172,8 @@ export function BalanceHeader({ transactions }: BalanceHeaderProps) {
         <div className="flex-1 max-w-md hidden md:block">
           <div className="glass rounded-xl p-4 border border-white/10">
             <p className="text-xs text-white/50 mb-3">
-              Tendência dos últimos 12 meses
+              Evolução do Saldo (Últimos lançamentos)
             </p>
-            {/* Componente Sparkline atualizado recebe os dados com Data */}
             <Sparkline data={stats.chartData} color="#CCFF00" height={80} />
           </div>
         </div>

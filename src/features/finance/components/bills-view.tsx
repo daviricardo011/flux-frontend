@@ -1,17 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  CreditCard,
-  Wifi,
-  Zap,
-  Home,
-  Phone,
-  Tv,
   Plus,
   Trash2,
   Calendar,
   Edit2,
   CheckCircle2,
   Power,
+  Search,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -40,27 +36,14 @@ import {
 } from "@/components/ui/select";
 import { BillService, type Bill } from "@/services/bill-service";
 import type { Transaction } from "@/features/finance/types";
+import { getIconComponent } from "@/lib/icons";
 
-const getIcon = (name: string) => {
-  const n = name.toLowerCase();
-  if (n.includes("netflix") || n.includes("tv") || n.includes("stream"))
-    return Tv;
-  if (n.includes("internet") || n.includes("wifi")) return Wifi;
-  if (n.includes("luz") || n.includes("energia") || n.includes("electric"))
-    return Zap;
-  if (n.includes("aluguel") || n.includes("casa") || n.includes("condominio"))
-    return Home;
-  if (
-    n.includes("celular") ||
-    n.includes("tim") ||
-    n.includes("claro") ||
-    n.includes("vivo")
-  )
-    return Phone;
-  return CreditCard;
+const getLocalToday = () => {
+  const local = new Date();
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+  return local.toISOString().split("T")[0];
 };
 
-// Meses para o Select
 const MONTHS = [
   "Janeiro",
   "Fevereiro",
@@ -79,14 +62,19 @@ const MONTHS = [
 export function BillsView() {
   const { user } = useAuth();
 
-  // Estados de Dados
+  // Dados
   const [bills, setBills] = useState<Bill[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>(
     []
   );
 
-  // Estados de UI
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  // UI
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
@@ -101,37 +89,25 @@ export function BillsView() {
   const [payData, setPayData] = useState({
     billId: "",
     amount: "",
-    date: new Date().toISOString().split("T")[0],
-    refMonth: format(new Date(), "MMMM", { locale: ptBR }), // Padrão: Mês atual
+    date: getLocalToday(),
+    refMonth: format(new Date(), "MMMM", { locale: ptBR }),
   });
 
-  // Carregamento de Dados (BLINDADO)
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
 
-    // 1. Carregar Contas
     const unsubBills = BillService.subscribeToBills((data) => {
       if (isMounted) setBills(data);
     });
-
-    // 2. Carregar Transações (para verificar pagamentos)
-    // Filtramos apenas as do mês atual/recente para não pesar
     const unsubTrans = TransactionService.subscribeToTransactions((data) => {
-      if (isMounted) {
-        // Pega transações dos últimos 60 dias para garantir
-        const recent = data.slice(0, 50);
-        setRecentTransactions(recent);
-      }
+      if (isMounted) setRecentTransactions(data.slice(0, 50));
     });
-
-    // 3. Carregar Categorias
     const fetchCats = async () => {
       try {
         const cats = await CategoryService.getCategories();
-        if (isMounted) {
+        if (isMounted)
           setCategories((cats || []).filter((c) => c.type === "expense"));
-        }
       } catch (err) {
         console.error(err);
       }
@@ -145,35 +121,45 @@ export function BillsView() {
     };
   }, [user]);
 
-  // Função para checar se está pago no mês atual
   const checkIsPaid = (bill: Bill) => {
     const currentMonthName = format(new Date(), "MMMM", {
       locale: ptBR,
     }).toLowerCase();
-
-    // Procura uma transação que:
-    // 1. Seja da mesma categoria da conta
-    // 2. Tenha o nome da conta na descrição OU tenha o mês atual na descrição
     return recentTransactions.some((t) => {
       const isSameCategory = t.category === bill.category;
       const desc = t.description.toLowerCase();
       const hasMonthRef = desc.includes(currentMonthName);
       const isPayment =
         desc.includes("pgto") || desc.includes(bill.name.toLowerCase());
-
-      // Lógica: É da mesma categoria E (tem o mês na descrição OU foi feito hoje)
       return isSameCategory && hasMonthRef && isPayment;
     });
   };
 
-  // --- HANDLERS ---
+  const filteredBills = useMemo(() => {
+    return bills.filter((bill) => {
+      const isPaid = checkIsPaid(bill);
+      const matchesSearch = bill.name
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      const matchesCategory =
+        categoryFilter === "all" || bill.category === categoryFilter;
 
+      let matchesStatus = true;
+      if (statusFilter === "active") matchesStatus = bill.active;
+      if (statusFilter === "inactive") matchesStatus = !bill.active;
+      if (statusFilter === "paid") matchesStatus = bill.active && isPaid;
+      if (statusFilter === "unpaid") matchesStatus = bill.active && !isPaid;
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [bills, searchTerm, statusFilter, categoryFilter, recentTransactions]);
+
+  // Handlers
   const handleOpenCreate = () => {
     setEditingBill(null);
     setFormData({ name: "", amount: "", dueDate: "", category: "" });
     setIsEditModalOpen(true);
   };
-
   const handleOpenEdit = (bill: Bill) => {
     setEditingBill(bill);
     setFormData({
@@ -184,80 +170,56 @@ export function BillsView() {
     });
     setIsEditModalOpen(true);
   };
-
   const handleSaveBill = async () => {
-    if (
-      !formData.name ||
-      !formData.amount ||
-      !formData.dueDate ||
-      !formData.category
-    ) {
-      alert("Preencha todos os campos obrigatórios");
-      return;
-    }
-    try {
-      const payload = {
-        name: formData.name,
-        amount: parseFloat(formData.amount),
-        dueDate: formData.dueDate,
-        category: formData.category,
-      };
-      if (editingBill) {
-        await BillService.updateBill(editingBill.id, payload);
-      } else {
-        await BillService.addBill(payload);
-      }
-      setIsEditModalOpen(false);
-    } catch (error) {
-      console.error(error);
-    }
+    if (!formData.name || !formData.amount) return;
+    const payload = {
+      name: formData.name,
+      amount: parseFloat(formData.amount),
+      dueDate: formData.dueDate,
+      category: formData.category,
+    };
+    if (editingBill) await BillService.updateBill(editingBill.id, payload);
+    else await BillService.addBill(payload);
+    setIsEditModalOpen(false);
   };
-
   const handleToggleActive = async (bill: Bill) => {
     await BillService.toggleActive(bill.id, bill.active);
   };
-
   const handleDelete = async (id: string) => {
-    if (confirm("Excluir esta conta?")) await BillService.deleteBill(id);
+    if (confirm("Excluir?")) await BillService.deleteBill(id);
   };
-
-  // Abrir modal de pagamento com mês atual pré-selecionado (Capitalizado)
   const handleOpenPay = (bill: Bill) => {
     const currentMonth = format(new Date(), "MMMM", { locale: ptBR });
     const capitalizedMonth =
       currentMonth.charAt(0).toUpperCase() + currentMonth.slice(1);
-
     setPayData({
       billId: bill.id,
       amount: bill.amount.toString(),
-      date: new Date().toISOString().split("T")[0],
+      date: getLocalToday(),
       refMonth: capitalizedMonth,
     });
     setIsPayModalOpen(true);
   };
-
   const handleConfirmPay = async () => {
     const bill = bills.find((b) => b.id === payData.billId);
-    if (!bill) return;
-
-    try {
-      // Cria a transação com formato padrão para ser detectada depois
-      await TransactionService.addTransaction({
-        description: `Pgto ${bill.name} - ${payData.refMonth}`,
-        amount: parseFloat(payData.amount),
-        type: "expense",
-        category: bill.category,
-        date: payData.date,
-      });
-
-      // Atualiza data do último pagamento na conta (opcional, mas bom pra cache visual)
-      await BillService.markAsPaid(bill.id, payData.date);
-      setIsPayModalOpen(false);
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao registrar pagamento.");
-    }
+    await TransactionService.addTransaction({
+      description: `Pgto ${bill?.name} - ${payData.refMonth}`,
+      amount: parseFloat(payData.amount),
+      type: "expense",
+      category: bill?.category || "",
+      date: payData.date,
+    });
+    await BillService.markAsPaid(payData.billId, payData.date);
+    setIsPayModalOpen(false);
   };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setCategoryFilter("all");
+  };
+  const hasFilters =
+    searchTerm || statusFilter !== "all" || categoryFilter !== "all";
 
   return (
     <div className="space-y-6">
@@ -273,16 +235,74 @@ export function BillsView() {
         </Button>
       </div>
 
+      <div className="p-4 glass rounded-xl border border-white/10 space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/40" />
+            <Input
+              placeholder="Buscar conta..."
+              className="pl-9 bg-black/20 border-white/10 text-white"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[140px] bg-black/40 border-white/10 text-white">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#0a0a0a] border-white/10 text-white">
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="active">Ativas</SelectItem>
+                <SelectItem value="paid">Pagas (Mês)</SelectItem>
+                <SelectItem value="unpaid">A Pagar (Mês)</SelectItem>
+                <SelectItem value="inactive">Inativas</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-[140px] bg-black/40 border-white/10 text-white">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#0a0a0a] border-white/10 text-white">
+                <SelectItem value="all">Todas</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.name}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={clearFilters}
+                className="text-red-400 hover:text-red-300"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {bills.length === 0 && (
+        {filteredBills.length === 0 && (
           <div className="col-span-full text-center py-12 glass rounded-2xl border border-white/10">
-            <p className="text-white/40">Nenhuma conta cadastrada.</p>
+            <p className="text-white/40">Nenhuma conta encontrada.</p>
           </div>
         )}
 
-        {bills.map((bill) => {
-          const Icon = getIcon(bill.name);
+        {filteredBills.map((bill) => {
+          // --- LOGICA DOS ICONES AQUI ---
           const isPaid = checkIsPaid(bill);
+
+          // 1. Busca a categoria completa pelo nome
+          const billCategory = categories.find((c) => c.name === bill.category);
+          // 2. Busca o componente do ícone usando sua lib
+          const Icon = getIconComponent(billCategory?.icon || "DollarSign");
+          // 3. Pega a cor
+          const color = billCategory?.color || "#FFFFFF";
 
           return (
             <div
@@ -304,11 +324,13 @@ export function BillsView() {
               <div className="flex items-start justify-between mb-4 relative z-10">
                 <div
                   className={cn(
-                    "w-12 h-12 rounded-xl flex items-center justify-center transition-colors",
-                    isPaid
-                      ? "bg-[#CCFF00]/20 text-[#CCFF00]"
-                      : "bg-white/10 text-white"
+                    "w-12 h-12 rounded-xl flex items-center justify-center transition-colors border border-white/5"
                   )}
+                  style={{
+                    // Se estiver pago, usa verde. Se não, usa a cor da categoria
+                    backgroundColor: isPaid ? "#CCFF0020" : `${color}20`,
+                    color: isPaid ? "#CCFF00" : color,
+                  }}
                 >
                   <Icon className="w-6 h-6" />
                 </div>
@@ -392,22 +414,17 @@ export function BillsView() {
         })}
       </div>
 
-      {/* --- MODAL CRIAR/EDITAR --- */}
+      {/* --- MODAIS (Cópia idêntica aos seus anteriores) --- */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="glass-heavy border-white/10 text-white sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>
-              {editingBill ? "Editar Conta" : "Nova Conta Fixa"}
-            </DialogTitle>
-            <DialogDescription className="text-white/50">
-              Configure os detalhes.
-            </DialogDescription>
+            <DialogTitle>{editingBill ? "Editar" : "Criar"}</DialogTitle>
+            <DialogDescription>Detalhes da conta.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Nome</Label>
               <Input
-                placeholder="Ex: Aluguel"
                 className="bg-black/40 border-white/10 text-white"
                 value={formData.name}
                 onChange={(e) =>
@@ -428,10 +445,9 @@ export function BillsView() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Vencimento</Label>
+                <Label>Dia</Label>
                 <Input
                   type="number"
-                  placeholder="Dia"
                   className="bg-black/40 border-white/10 text-white"
                   value={formData.dueDate}
                   onChange={(e) =>
@@ -444,17 +460,15 @@ export function BillsView() {
               <Label>Categoria</Label>
               <Select
                 value={formData.category}
-                onValueChange={(val) =>
-                  setFormData({ ...formData, category: val })
-                }
+                onValueChange={(v) => setFormData({ ...formData, category: v })}
               >
                 <SelectTrigger className="bg-black/40 border-white/10 text-white">
-                  <SelectValue placeholder="Selecione..." />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#0a0a0a] border-white/10 text-white">
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.name}>
-                      {cat.name}
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -462,7 +476,7 @@ export function BillsView() {
             </div>
             <Button
               onClick={handleSaveBill}
-              className="w-full bg-[#CCFF00] text-black font-bold mt-4"
+              className="w-full bg-[#CCFF00] text-black font-bold"
             >
               Salvar
             </Button>
@@ -470,22 +484,16 @@ export function BillsView() {
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL PAGAR --- */}
       <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
         <DialogContent className="glass-heavy border-white/10 text-white sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Registrar Pagamento</DialogTitle>
-            <DialogDescription className="text-white/50">
-              Lançar despesa no financeiro.
-            </DialogDescription>
+            <DialogTitle>Pagar</DialogTitle>
+            <DialogDescription>Confirmar pagamento.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="p-3 bg-[#CCFF00]/10 border border-[#CCFF00]/20 rounded-xl text-center mb-2">
-              <span className="block text-xs text-[#CCFF00] uppercase tracking-wider">
-                Valor
-              </span>
+            <div className="p-3 bg-[#CCFF00]/10 border border-[#CCFF00]/20 rounded-xl text-center">
               <span className="text-2xl font-bold text-white">
-                {parseFloat(payData.amount || "0").toLocaleString("pt-BR", {
+                {parseFloat(payData.amount).toLocaleString("pt-BR", {
                   style: "currency",
                   currency: "BRL",
                 })}
@@ -503,7 +511,7 @@ export function BillsView() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Valor Final</Label>
+              <Label>Valor</Label>
               <Input
                 type="number"
                 className="bg-black/40 border-white/10 text-white"
@@ -513,32 +521,27 @@ export function BillsView() {
                 }
               />
             </div>
-
-            {/* SELECT DE MÊS DE REFERÊNCIA */}
             <div className="space-y-2">
-              <Label>Mês de Referência</Label>
+              <Label>Mês Ref</Label>
               <Select
                 value={payData.refMonth}
-                onValueChange={(val) =>
-                  setPayData({ ...payData, refMonth: val })
-                }
+                onValueChange={(v) => setPayData({ ...payData, refMonth: v })}
               >
                 <SelectTrigger className="bg-black/40 border-white/10 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#0a0a0a] border-white/10 text-white h-[200px]">
-                  {MONTHS.map((month) => (
-                    <SelectItem key={month} value={month}>
-                      {month}
+                  {MONTHS.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <Button
               onClick={handleConfirmPay}
-              className="w-full bg-[#CCFF00] text-black font-bold mt-4"
+              className="w-full bg-[#CCFF00] text-black font-bold"
             >
               Confirmar
             </Button>
