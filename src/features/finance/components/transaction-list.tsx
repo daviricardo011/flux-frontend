@@ -27,7 +27,7 @@ export function TransactionList({
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
     const date = new Date(`${dateString}T12:00:00`);
-    return format(date, "dd/MM/yyyy", { locale: ptBR });
+    return format(date, "dd 'de' MMM", { locale: ptBR });
   };
 
   return (
