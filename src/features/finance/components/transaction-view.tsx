@@ -1,4 +1,4 @@
-"use client"
+ 
 
 import { ShoppingBag, Coffee, Zap, Home, TrendingUp, Wifi, Car } from "lucide-react"
 

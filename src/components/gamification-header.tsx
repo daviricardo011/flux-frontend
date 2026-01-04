@@ -1,4 +1,4 @@
-"use client"
+ 
 import { Flame, Zap } from "lucide-react"
 import { motion } from "framer-motion"
 

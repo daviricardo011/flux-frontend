@@ -34,22 +34,24 @@ export function CategoryManager() {
   const [newExpenseName, setNewExpenseName] = useState("");
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user) return;
 
-    const unsubscribe = CategoryService.subscribe(user.id, (data) => {
+    // MUDANÇA AQUI: subscribe -> subscribeToCategories
+    const unsubscribe = CategoryService.subscribeToCategories((data) => {
       setCategories(data);
     });
 
     return () => unsubscribe();
-  }, [user?.id]);
+  }, [user]);
 
   const incomeCategories = categories.filter((c) => c.type === "income");
   const expenseCategories = categories.filter((c) => c.type === "expense");
 
   const handleUpdate = async (id: string, updates: Partial<Category>) => {
     try {
-      await CategoryService.update(id, updates);
-      setEditingId(null);
+      // MUDANÇA AQUI: update -> updateCategory
+      await CategoryService.updateCategory(id, updates);
+      // setEditingId(null); // Comentado para permitir edição contínua se quiser
     } catch (error) {
       console.error("Erro ao atualizar:", error);
     }
@@ -58,7 +60,8 @@ export function CategoryManager() {
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir esta categoria?")) {
       try {
-        await CategoryService.delete(id);
+        // MUDANÇA AQUI: delete -> deleteCategory
+        await CategoryService.deleteCategory(id);
       } catch (error) {
         console.error("Erro ao excluir:", error);
       }
@@ -67,11 +70,11 @@ export function CategoryManager() {
 
   const handleAdd = async (type: "income" | "expense") => {
     const name = type === "income" ? newIncomeName : newExpenseName;
-    if (!name.trim() || !user?.id) return;
+    if (!name.trim() || !user) return;
 
     try {
-      await CategoryService.add({
-        userId: user.id,
+      // MUDANÇA AQUI: add -> addCategory
+      await CategoryService.addCategory({
         name: name.trim(),
         type,
         icon: type === "income" ? "TrendingUp" : "ShoppingBag",
@@ -86,7 +89,8 @@ export function CategoryManager() {
   };
 
   const CategoryItem = ({ category }: { category: Category }) => {
-    const Icon = getIconComponent(category.icon);
+    // Fallback para ícone se não existir
+    const Icon = getIconComponent(category.icon || "Circle"); 
     const isEditing = editingId === category.id;
 
     return (
@@ -95,9 +99,9 @@ export function CategoryManager() {
           <PopoverTrigger asChild>
             <button
               className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-all hover:scale-110"
-              style={{ backgroundColor: `${category.color}20` }}
+              style={{ backgroundColor: `${category.color || '#fff'}20` }}
             >
-              <Icon className="w-5 h-5" style={{ color: category.color }} />
+              <Icon className="w-5 h-5" style={{ color: category.color || '#fff' }} />
             </button>
           </PopoverTrigger>
           <PopoverContent className="glass border border-white/10 p-3 w-72">
@@ -153,10 +157,14 @@ export function CategoryManager() {
           <Input
             autoFocus
             defaultValue={category.name}
-            onBlur={(e) => handleUpdate(category.id, { name: e.target.value })}
+            onBlur={(e) => {
+                handleUpdate(category.id, { name: e.target.value });
+                setEditingId(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 handleUpdate(category.id, { name: e.currentTarget.value });
+                setEditingId(null);
               }
             }}
             className="flex-1 bg-white/5 border-white/20 text-white h-8"
@@ -182,6 +190,7 @@ export function CategoryManager() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Coluna Receitas */}
       <div className="glass rounded-2xl p-6 border border-white/10">
         <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <span className="text-[#00FF66]">↑</span>
@@ -216,6 +225,7 @@ export function CategoryManager() {
         </div>
       </div>
 
+      {/* Coluna Despesas */}
       <div className="glass rounded-2xl p-6 border border-white/10">
         <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <span className="text-[#FF6B6B]">↓</span>

@@ -1,62 +1,50 @@
+ ;
+
+import { Line, LineChart, ResponsiveContainer, Tooltip } from "recharts";
+
 interface SparklineProps {
-  data: number[]
-  color?: string
-  height?: number
+  data: { value: number; date: string }[];
+  color?: string;
+  height?: number;
 }
 
-export function Sparkline({ data, color = "#CCFF00", height = 60 }: SparklineProps) {
-  if (data.length < 2) return null
-
-  const max = Math.max(...data)
-  const min = Math.min(...data)
-  const range = max - min
-
-  const points = data
-    .map((value, index) => {
-      const x = (index / (data.length - 1)) * 100
-      const y = range === 0 ? 50 : ((max - value) / range) * 100
-      return `${x},${y}`
-    })
-    .join(" ")
-
+export function Sparkline({ data, color = "#CCFF00", height = 50 }: SparklineProps) {
   return (
-    <svg width="100%" height={height} className="overflow-visible">
-      {/* Grid lines */}
-      <line x1="0" y1="0" x2="100%" y2="0" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-      <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-      <line x1="0" y1="100%" x2="100%" y2="100%" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-
-      {/* Area fill */}
-      <polygon points={`0,100 ${points} 100,100`} fill={`${color}20`} stroke="none" />
-
-      {/* Line */}
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-
-      {/* Dots on hover */}
-      {data.map((value, index) => {
-        const x = (index / (data.length - 1)) * 100
-        const y = range === 0 ? 50 : ((max - value) / range) * 100
-        return (
-          <circle
-            key={index}
-            cx={`${x}%`}
-            cy={`${y}%`}
-            r="3"
-            fill={color}
-            className="opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
-          >
-            <title>${value.toLocaleString()}</title>
-          </circle>
-        )
-      })}
-    </svg>
-  )
+    <div style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <Tooltip
+            content={({ active, payload }) => {
+              if (active && payload && payload.length) {
+                const item = payload[0].payload;
+                return (
+                  <div className="bg-[#050505] border border-white/10 p-2 rounded-lg shadow-xl">
+                    <p className="text-[10px] text-white/50 uppercase tracking-wider mb-0.5">
+                      {item.date}
+                    </p>
+                    <p className="text-sm font-bold text-white">
+                      {item.value.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            }}
+            cursor={{ stroke: "white", strokeWidth: 1, strokeOpacity: 0.1 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, fill: color, stroke: "#000", strokeWidth: 2 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
 }

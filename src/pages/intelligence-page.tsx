@@ -1,4 +1,4 @@
-"use client"
+ 
 
 import { BurnRateProjector } from "../components/burn-rate-projector"
 import { SubscriptionKillSwitch } from "../components/subscription-kill-switch"

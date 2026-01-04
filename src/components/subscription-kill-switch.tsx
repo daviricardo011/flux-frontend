@@ -1,4 +1,4 @@
-"use client"
+ 
 
 import { useState } from "react"
 import { Tv, Music, Cloud, Package, AlertCircle, X, Check } from "lucide-react"

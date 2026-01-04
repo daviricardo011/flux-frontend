@@ -1,4 +1,4 @@
-"use client"
+ 
 
 import { Trophy, Target, Flame, Star, Award, Zap, Lock } from "lucide-react"
 import { motion } from "framer-motion"

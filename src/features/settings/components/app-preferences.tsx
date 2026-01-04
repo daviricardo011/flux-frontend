@@ -1,4 +1,4 @@
-"use client";
+ ;
 
 import { useState, useEffect } from "react";
 import { Bell, Lock, Volume2, Moon, Smartphone, Shield } from "lucide-react";

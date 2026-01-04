@@ -1,4 +1,4 @@
-"use client"
+ 
 import { X } from "lucide-react"
 import { ShoppingListView } from "./shopping-list-view"
 import { TaskListView } from "./task-list-view"

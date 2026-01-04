@@ -1,4 +1,4 @@
-"use client"
+ 
 
 import { useState } from "react"
 import { Flame, Droplet, Book, Dumbbell } from "lucide-react"

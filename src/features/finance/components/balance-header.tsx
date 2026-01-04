@@ -1,43 +1,175 @@
-"use client"
+import { useMemo } from "react";
+import {
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  ArrowUpCircle,
+  ArrowDownCircle,
+} from "lucide-react";
+import { Sparkline } from "@/components/sparkline";
+import { subMonths, isBefore, endOfMonth } from "date-fns";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import type { Transaction } from "@/features/finance/types";
 
-import { DollarSign, TrendingUp } from "lucide-react"
-import { Sparkline } from "../../../components/sparkline"
+interface BalanceHeaderProps {
+  transactions: Transaction[];
+}
 
-const monthlyData = [8200, 8900, 9400, 10200, 11500, 11800, 12000, 12100, 12300, 12400, 12450, 12483]
+export function BalanceHeader({ transactions }: BalanceHeaderProps) {
+  const stats = useMemo(() => {
+    const now = new Date();
+    const lastMonth = subMonths(now, 1);
 
-export function BalanceHeader() {
-  const currentBalance = 12483
-  const previousBalance = 11100
-  const percentChange = ((currentBalance - previousBalance) / previousBalance) * 100
+    // 1. Cálculos de Saldo e Totais
+    const totalBalance = transactions.reduce((acc, t) => {
+      return acc + (t.type === "income" ? Number(t.amount) : -Number(t.amount));
+    }, 0);
+
+    const totalIncome = transactions
+      .filter((t) => t.type === "income")
+      .reduce((acc, t) => acc + Number(t.amount), 0);
+
+    const totalExpense = transactions
+      .filter((t) => t.type === "expense")
+      .reduce((acc, t) => acc + Number(t.amount), 0);
+
+    // 2. Saldo mês anterior
+    const lastMonthEnd = endOfMonth(lastMonth);
+    const prevBalance = transactions
+      .filter((t) => isBefore(new Date(t.date), lastMonthEnd))
+      .reduce((acc, t) => {
+        return (
+          acc + (t.type === "income" ? Number(t.amount) : -Number(t.amount))
+        );
+      }, 0);
+
+    // 3. Variação Percentual
+    const percentChange =
+      prevBalance === 0
+        ? 0
+        : ((totalBalance - prevBalance) / Math.abs(prevBalance)) * 100;
+
+    // 4. Gráfico (ALTERADO AQUI)
+    const sparkData = transactions
+      .slice(0, 20)
+      .reverse()
+      .map((t) => ({
+        value: Number(t.amount) * (t.type === "expense" ? -1 : 1),
+        // Formata para "jan/24" ou similar
+        date: new Date(t.date).toLocaleDateString("pt-BR", { 
+            month: "short", 
+            year: "numeric" 
+        })
+      }));
+
+    const chartData = sparkData.length > 0 
+        ? sparkData 
+        : [{ value: 0, date: "" }];
+
+    return {
+      totalBalance,
+      totalIncome,
+      totalExpense,
+      percentChange,
+      chartData,
+    };
+  }, [transactions]);
+
+  const formatMoney = (val: number) =>
+    val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   return (
     <div className="glass rounded-2xl p-6 md:p-8 border border-white/10">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-[#CCFF00]/10 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-[#CCFF00]" />
-            </div>
-            <p className="text-sm text-white/60">Total Balance</p>
-          </div>
+          {/* Tooltip de Detalhes do Saldo */}
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 mb-2 w-fit cursor-help">
+                  <div className="w-10 h-10 rounded-xl bg-[#CCFF00]/10 flex items-center justify-center transition-colors hover:bg-[#CCFF00]/20">
+                    <DollarSign className="w-5 h-5 text-[#CCFF00]" />
+                  </div>
+                  <p className="text-sm text-white/60">Saldo Total</p>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="right"
+                className="bg-[#0a0a0a] border-white/10 p-3"
+              >
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-white/50 uppercase tracking-wider mb-2">
+                    Resumo Geral
+                  </p>
+                  <div className="flex items-center gap-2 text-[#CCFF00]">
+                    <ArrowUpCircle className="w-4 h-4" />
+                    <span className="font-mono">
+                      {formatMoney(stats.totalIncome)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-red-400">
+                    <ArrowDownCircle className="w-4 h-4" />
+                    <span className="font-mono">
+                      {formatMoney(stats.totalExpense)}
+                    </span>
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           <div className="flex items-baseline gap-3 mb-1">
             <h1 className="text-5xl md:text-6xl font-bold text-white tracking-tight">
-              ${currentBalance.toLocaleString()}
+              {formatMoney(stats.totalBalance)}
             </h1>
-            <span className="text-[#CCFF00] text-lg font-semibold flex items-center gap-1">
-              <TrendingUp className="w-5 h-5" />+{percentChange.toFixed(1)}%
-            </span>
+
+            {/* Tooltip de Variação Percentual */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={`text-lg font-semibold flex items-center gap-1 cursor-help transition-opacity hover:opacity-80 ${
+                      stats.percentChange >= 0
+                        ? "text-[#CCFF00]"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {stats.percentChange >= 0 ? (
+                      <TrendingUp className="w-5 h-5" />
+                    ) : (
+                      <TrendingDown className="w-5 h-5" />
+                    )}
+                    {stats.percentChange > 0 ? "+" : ""}
+                    {stats.percentChange.toFixed(1)}%
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="bg-[#0a0a0a] border-white/10 text-white">
+                  <p>
+                    {stats.percentChange >= 0
+                      ? "Crescimento em relação ao mês anterior"
+                      : "Redução em relação ao mês anterior"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-          <p className="text-sm text-white/50">vs. last month</p>
         </div>
 
-        <div className="flex-1 max-w-md">
+        <div className="flex-1 max-w-md hidden md:block">
           <div className="glass rounded-xl p-4 border border-white/10">
-            <p className="text-xs text-white/50 mb-3">12-Month Trend</p>
-            <Sparkline data={monthlyData} color="#CCFF00" height={80} />
+            <p className="text-xs text-white/50 mb-3">
+              Tendência dos últimos 12 meses
+            </p>
+            {/* Componente Sparkline atualizado recebe os dados com Data */}
+            <Sparkline data={stats.chartData} color="#CCFF00" height={80} />
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

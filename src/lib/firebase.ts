@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, memoryLocalCache } from "firebase/firestore";
 // import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -26,5 +26,9 @@ isSupported().then((supported) => {
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
-export const db = getFirestore(app);
+// export const db = getFirestore(app);
 // export const storage = getStorage(app);
+
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache()
+});

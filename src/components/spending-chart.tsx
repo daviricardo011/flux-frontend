@@ -1,4 +1,4 @@
-"use client"
+ 
 
 export function SpendingChart() {
   const data = [45, 52, 38, 65, 48, 72, 58, 85, 65, 78, 92, 88]
