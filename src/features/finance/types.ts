@@ -10,3 +10,15 @@ export interface Transaction {
   date: string; // ISO string
   createdAt: any; // Timestamp do Firestore
 }
+
+export interface Goal {
+  id?: string;
+  userId?: string;
+  name: string;
+  description?: string;
+  targetAmount: number; // Quanto quer juntar
+  currentAmount: number; // Quanto já tem
+  deadline?: string; // Data alvo (opcional)
+  category?: string; // Para ícone/cor
+  createdAt?: string;
+}

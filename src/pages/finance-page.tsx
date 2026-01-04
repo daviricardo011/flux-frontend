@@ -44,12 +44,13 @@ import {
 import { BalanceHeader } from "@/features/finance/components/balance-header";
 import { TransactionList } from "@/features/finance/components/transaction-list";
 import { TransactionTable } from "@/features/finance/components/transaction-table";
-import { PaginationControls } from "@/features/finance/components/pagination-controls"; // <--- NOVO COMPONENTE
+import { PaginationControls } from "@/features/finance/components/pagination-controls";
 import { TransactionService } from "@/services/transaction-service";
 import { CategoryService, type Category } from "@/services/category-service";
 import type { Transaction, TransactionType } from "@/features/finance/types";
 import { useAuth } from "@/features/auth/auth";
 import { BillsView } from "@/features/finance/components/bills-view";
+import { GoalsView } from "@/features/finance/components/goals-view";
 
 const getLocalToday = () => {
   const local = new Date();
@@ -65,7 +66,7 @@ export function FinancePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Paginação (Novos Estados)
+  // Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -175,8 +176,6 @@ export function FinancePage() {
   ]);
 
   // --- LÓGICA DE PAGINAÇÃO ---
-
-  // 1. Resetar para página 1 se os filtros mudarem
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -189,7 +188,6 @@ export function FinancePage() {
     filterMaxVal,
   ]);
 
-  // 2. Calcular dados paginados
   const totalItems = filteredTransactions.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
@@ -224,7 +222,6 @@ export function FinancePage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      // ATENÇÃO: Seleciona apenas o que está visível/filtrado (não só a página atual, mas todos filtrados)
       setSelectedIds(filteredTransactions.map((t) => t.id!));
     } else {
       setSelectedIds([]);
@@ -357,6 +354,7 @@ export function FinancePage() {
       <BalanceHeader transactions={transactions} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {/* Cabeçalho das Abas */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
           <TabsList className="glass w-full md:w-auto p-1 border border-white/10 h-auto">
             <TabsTrigger
@@ -370,6 +368,12 @@ export function FinancePage() {
               className="px-6 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
             >
               Contas Fixas
+            </TabsTrigger>
+            <TabsTrigger
+              value="goals"
+              className="px-6 py-2 rounded-lg data-[state=active]:bg-[#CCFF00] data-[state=active]:text-black font-medium transition-all"
+            >
+              Metas
             </TabsTrigger>
           </TabsList>
 
@@ -396,6 +400,7 @@ export function FinancePage() {
           )}
         </div>
 
+        {/* Filtros da Aba de Transações */}
         {activeTab === "transactions" && (
           <div className="mb-6 p-4 glass rounded-xl border border-white/10 space-y-4">
             <div className="flex flex-col md:flex-row gap-4">
@@ -511,6 +516,9 @@ export function FinancePage() {
           </div>
         )}
 
+        {/* --- CONTEÚDO DAS ABAS --- */}
+
+        {/* 1. Transações */}
         <TabsContent value="transactions" className="mt-0 relative">
           {/* BARRA FLUTUANTE DE AÇÕES EM MASSA */}
           {selectedIds.length > 0 && (
@@ -572,7 +580,7 @@ export function FinancePage() {
             <>
               {view === "list" ? (
                 <TransactionList
-                  data={paginatedTransactions} // <--- USA DADOS PAGINADOS
+                  data={paginatedTransactions}
                   categories={categories}
                   onDelete={TransactionService.deleteTransaction}
                   onEdit={handleOpenEdit}
@@ -581,7 +589,7 @@ export function FinancePage() {
                 />
               ) : (
                 <TransactionTable
-                  data={paginatedTransactions} // <--- USA DADOS PAGINADOS
+                  data={paginatedTransactions}
                   categories={categories}
                   selectedIds={selectedIds}
                   onSelect={handleSelect}
@@ -591,7 +599,6 @@ export function FinancePage() {
                 />
               )}
 
-              {/* PAGINAÇÃO */}
               <PaginationControls
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -604,15 +611,20 @@ export function FinancePage() {
           )}
         </TabsContent>
 
+        {/* 2. Contas Fixas */}
         <TabsContent value="bills" className="mt-0">
           <BillsView />
+        </TabsContent>
+
+        {/* 3. Metas (Goals) - NOVA ABA */}
+        <TabsContent value="goals" className="mt-0">
+          <GoalsView />
         </TabsContent>
       </Tabs>
 
       {/* --- MODAL CRIAR / EDITAR (INDIVIDUAL) --- */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="glass-heavy border-white/10 text-white sm:max-w-[425px]">
-          {/* ... (Mesmo conteúdo do modal anterior) ... */}
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Editar Transação" : "Nova Transação"}
@@ -656,6 +668,7 @@ export function FinancePage() {
                 Despesa
               </Button>
             </div>
+            {/* Campos do Form */}
             <div className="space-y-2">
               <Label>Descrição</Label>
               <div className="relative">
