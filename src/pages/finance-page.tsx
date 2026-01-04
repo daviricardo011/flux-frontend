@@ -1,6 +1,4 @@
-"use client";
-
-import { useState, useEffect, useMemo } from "react";
+ import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   DollarSign,
@@ -11,6 +9,9 @@ import {
   Search,
   Filter,
   X,
+  Edit2,
+  Trash2,
+  AlertTriangle, // Novo ícone para alerta
 } from "lucide-react";
 
 // UI Components
@@ -22,7 +23,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
@@ -58,12 +58,20 @@ const getLocalToday = () => {
 export function FinancePage() {
   const { user } = useAuth();
 
-  // Dados Principais
+  // Dados
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Estados de Filtro
+  // Seleção e Bulk Actions
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [bulkEditField, setBulkEditField] = useState<
+    "category" | "date" | "amount" | "description"
+  >("category"); // Removido "type" daqui
+  const [bulkEditValue, setBulkEditValue] = useState("");
+
+  // Filtros
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">(
     "all"
@@ -77,13 +85,16 @@ export function FinancePage() {
   // UI States
   const [activeTab, setActiveTab] = useState("transactions");
   const [view, setView] = useState<"list" | "table">("list");
+
+  // Create/Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [keepOpen, setKeepOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // Form Novo Item
-  const [newTransaction, setNewTransaction] = useState({
+  // Form State
+  const [formData, setFormData] = useState({
     description: "",
     amount: "",
     type: "expense" as TransactionType,
@@ -110,10 +121,9 @@ export function FinancePage() {
         const cats = await CategoryService.getCategories();
         if (isMounted) setCategories(cats || []);
       } catch (e) {
-        console.error("Erro ao buscar categorias", e);
+        console.error(e);
       }
     };
-
     fetchCats();
 
     return () => {
@@ -125,28 +135,18 @@ export function FinancePage() {
   // --- LÓGICA DE FILTRAGEM ---
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
-      // 1. Filtro de Texto (Título)
       const matchesSearch = t.description
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
-
-      // 2. Filtro de Tipo (Entrada/Saída)
       const matchesType = filterType === "all" || t.type === filterType;
-
-      // 3. Filtro de Categoria
       const matchesCategory =
         filterCategory === "all" || t.category === filterCategory;
-
-      // 4. Filtro de Data
       const matchesDateStart = !filterDateStart || t.date >= filterDateStart;
       const matchesDateEnd = !filterDateEnd || t.date <= filterDateEnd;
-
-      // 5. Filtro de Valor
       const matchesMinVal =
         !filterMinVal || Number(t.amount) >= Number(filterMinVal);
       const matchesMaxVal =
         !filterMaxVal || Number(t.amount) <= Number(filterMaxVal);
-
       return (
         matchesSearch &&
         matchesType &&
@@ -168,42 +168,131 @@ export function FinancePage() {
     filterMaxVal,
   ]);
 
-  // Handlers de Ação
-  const handleSave = async () => {
-    if (
-      !newTransaction.description ||
-      !newTransaction.amount ||
-      !newTransaction.category
-    ) {
-      alert("Preencha todos os campos!");
-      return;
+  // --- LÓGICA DE SELEÇÃO E VALIDAÇÃO DE TIPOS ---
+
+  // Recupera os objetos completos das transações selecionadas
+  const selectedTransactions = useMemo(() => {
+    return transactions.filter((t) => selectedIds.includes(t.id!));
+  }, [transactions, selectedIds]);
+
+  // Verifica se há tipos misturados na seleção (Ex: Receita E Despesa juntos)
+  const hasMixedTypes = useMemo(() => {
+    if (selectedTransactions.length === 0) return false;
+    const firstType = selectedTransactions[0].type;
+    return !selectedTransactions.every((t) => t.type === firstType);
+  }, [selectedTransactions]);
+
+  // Define qual lista de categorias mostrar no Bulk Edit
+  // Se não for misto, pega o tipo do primeiro item. Se for misto, array vazio.
+  const bulkEditCategories = useMemo(() => {
+    if (hasMixedTypes || selectedTransactions.length === 0) return [];
+    const type = selectedTransactions[0].type;
+    return categories.filter((c) => c.type === type);
+  }, [hasMixedTypes, selectedTransactions, categories]);
+
+  // --- HANDLERS ---
+  const handleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(filteredTransactions.map((t) => t.id!));
+    } else {
+      setSelectedIds([]);
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (
+      confirm(`Tem certeza que deseja excluir ${selectedIds.length} itens?`)
+    ) {
+      await TransactionService.deleteMany(selectedIds);
+      setSelectedIds([]);
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!bulkEditValue) return alert("Selecione um valor");
+
+    setIsSubmitting(true);
+    try {
+      const updates: any = {};
+      if (bulkEditField === "amount")
+        updates[bulkEditField] = parseFloat(bulkEditValue);
+      else updates[bulkEditField] = bulkEditValue;
+
+      await TransactionService.updateMany(selectedIds, updates);
+      setIsBulkEditOpen(false);
+      setSelectedIds([]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenCreate = () => {
+    setEditingId(null);
+    setFormData({
+      description: "",
+      amount: "",
+      type: "expense",
+      category: "",
+      date: getLocalToday(),
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (transaction: Transaction) => {
+    setEditingId(transaction.id!);
+    setFormData({
+      description: transaction.description,
+      amount: transaction.amount.toString(),
+      type: transaction.type,
+      category: transaction.category,
+      date: transaction.date,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.description || !formData.amount || !formData.category)
+      return alert("Preencha todos os campos!");
 
     setIsSubmitting(true);
     setShowSuccess(false);
 
     try {
-      await TransactionService.addTransaction({
-        description: newTransaction.description,
-        amount: parseFloat(newTransaction.amount),
-        type: newTransaction.type,
-        category: newTransaction.category,
-        date: newTransaction.date,
-      });
+      const payload = {
+        description: formData.description,
+        amount: parseFloat(formData.amount),
+        type: formData.type,
+        category: formData.category,
+        date: formData.date,
+      };
 
-      if (keepOpen) {
-        setNewTransaction((prev) => ({ ...prev, description: "", amount: "" }));
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 2500);
-      } else {
-        setNewTransaction({
-          description: "",
-          amount: "",
-          type: "expense",
-          category: "",
-          date: getLocalToday(),
-        });
+      if (editingId) {
+        await TransactionService.updateTransaction(editingId, payload);
         setIsModalOpen(false);
+      } else {
+        await TransactionService.addTransaction(payload);
+        if (keepOpen) {
+          setFormData((prev) => ({ ...prev, description: "", amount: "" }));
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 2500);
+        } else {
+          setFormData({
+            description: "",
+            amount: "",
+            type: "expense",
+            category: "",
+            date: getLocalToday(),
+          });
+          setIsModalOpen(false);
+        }
       }
     } catch (error) {
       console.error("Erro ao salvar", error);
@@ -212,9 +301,12 @@ export function FinancePage() {
     }
   };
 
+  // Categorias para o modal individual
   const availableCategories = categories.filter(
-    (cat) => cat.type === newTransaction.type
+    (cat) => cat.type === formData.type
   );
+
+  // Categorias para o filtro da tela
   const filterCategoriesList = categories.filter(
     (cat) => filterType === "all" || cat.type === filterType
   );
@@ -243,7 +335,6 @@ export function FinancePage() {
       <BalanceHeader transactions={transactions} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        {/* Header das Abas e Botão Novo */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
           <TabsList className="glass w-full md:w-auto p-1 border border-white/10 h-auto">
             <TabsTrigger
@@ -273,189 +364,19 @@ export function FinancePage() {
                 </TabsList>
               </Tabs>
 
-              <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogTrigger asChild>
-                  <Button className="flex-1 md:flex-none bg-[#CCFF00] text-black hover:bg-[#b3e600] font-bold transition-transform hover:scale-105">
-                    <Plus className="w-4 h-4 mr-2" /> Nova
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="glass-heavy border-white/10 text-white sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>Adicionar Movimentação</DialogTitle>
-                    <DialogDescription className="text-white/50">
-                      Preencha os dados abaixo.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-5 py-4">
-                    {/* ... (Conteúdo do Modal Mantido Igual) ... */}
-                    <div className="flex gap-2 p-1 bg-white/5 rounded-lg border border-white/5">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() =>
-                          setNewTransaction((prev) => ({
-                            ...prev,
-                            type: "income",
-                            category: "",
-                          }))
-                        }
-                        className={`flex-1 transition-all ${
-                          newTransaction.type === "income"
-                            ? "bg-[#CCFF00] text-black shadow-lg font-bold"
-                            : "text-white/60 hover:text-white"
-                        }`}
-                      >
-                        Receita
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() =>
-                          setNewTransaction((prev) => ({
-                            ...prev,
-                            type: "expense",
-                            category: "",
-                          }))
-                        }
-                        className={`flex-1 transition-all ${
-                          newTransaction.type === "expense"
-                            ? "bg-red-500 text-white shadow-lg font-bold"
-                            : "text-white/60 hover:text-white"
-                        }`}
-                      >
-                        Despesa
-                      </Button>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Descrição</Label>
-                      <div className="relative">
-                        <AlignLeft className="absolute left-3 top-2.5 h-4 w-4 text-white/40" />
-                        <Input
-                          placeholder="Ex: Mercado"
-                          className="pl-9 bg-black/40 border-white/10 text-white placeholder:text-white/20"
-                          value={newTransaction.description}
-                          onChange={(e) =>
-                            setNewTransaction({
-                              ...newTransaction,
-                              description: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Valor</Label>
-                        <div className="relative">
-                          <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-white/40" />
-                          <Input
-                            type="number"
-                            placeholder="0.00"
-                            className="pl-9 bg-black/40 border-white/10 text-white placeholder:text-white/20"
-                            value={newTransaction.amount}
-                            onChange={(e) =>
-                              setNewTransaction({
-                                ...newTransaction,
-                                amount: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Data</Label>
-                        <Input
-                          type="date"
-                          className="bg-black/40 border-white/10 text-white"
-                          value={newTransaction.date}
-                          onChange={(e) =>
-                            setNewTransaction({
-                              ...newTransaction,
-                              date: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Categoria</Label>
-                      <Select
-                        value={newTransaction.category}
-                        onValueChange={(val) =>
-                          setNewTransaction({
-                            ...newTransaction,
-                            category: val,
-                          })
-                        }
-                      >
-                        <SelectTrigger className="bg-black/40 border-white/10 text-white">
-                          <SelectValue placeholder="Selecione..." />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#0a0a0a] border-white/10 text-white">
-                          {availableCategories.length === 0 ? (
-                            <SelectItem value="none" disabled>
-                              Sem categorias
-                            </SelectItem>
-                          ) : (
-                            availableCategories.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.name}>
-                                {cat.name}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2 pt-2">
-                      <input
-                        type="checkbox"
-                        id="keepOpen"
-                        checked={keepOpen}
-                        onChange={(e) => setKeepOpen(e.target.checked)}
-                        className="w-4 h-4 rounded border-white/20 bg-white/5 accent-[#CCFF00] cursor-pointer"
-                      />
-                      <Label
-                        htmlFor="keepOpen"
-                        className="text-sm font-normal text-white/60 cursor-pointer select-none flex items-center gap-1"
-                      >
-                        <Repeat className="w-3 h-3" /> Continuar adicionando
-                        itens
-                      </Label>
-                    </div>
-                  </div>
-                  {showSuccess && (
-                    <div className="mb-3 p-2 rounded-lg bg-[#CCFF00]/10 border border-[#CCFF00]/20 flex items-center justify-center gap-2 text-[#CCFF00] text-sm animate-in fade-in slide-in-from-bottom-2">
-                      <Check className="w-4 h-4" />
-                      <span className="font-medium">Salvo com sucesso!</span>
-                    </div>
-                  )}
-                  <Button
-                    onClick={handleSave}
-                    disabled={isSubmitting}
-                    className="w-full bg-[#CCFF00] text-black hover:bg-[#b3e600] font-bold h-11"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
-                        Salvando...
-                      </>
-                    ) : keepOpen ? (
-                      "Salvar e Continuar"
-                    ) : (
-                      "Salvar"
-                    )}
-                  </Button>
-                </DialogContent>
-              </Dialog>
+              <Button
+                onClick={handleOpenCreate}
+                className="flex-1 md:flex-none bg-[#CCFF00] text-black hover:bg-[#b3e600] font-bold transition-transform hover:scale-105"
+              >
+                <Plus className="w-4 h-4 mr-2" /> Nova
+              </Button>
             </div>
           )}
         </div>
 
-        {/* --- ÁREA DE FILTROS --- */}
         {activeTab === "transactions" && (
           <div className="mb-6 p-4 glass rounded-xl border border-white/10 space-y-4">
             <div className="flex flex-col md:flex-row gap-4">
-              {/* Busca Texto */}
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/40" />
                 <Input
@@ -466,7 +387,6 @@ export function FinancePage() {
                 />
               </div>
 
-              {/* Botão de Filtros Avançados (Popover) */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -477,8 +397,7 @@ export function FinancePage() {
                         : ""
                     }`}
                   >
-                    <Filter className="w-4 h-4 mr-2" />
-                    Filtros{" "}
+                    <Filter className="w-4 h-4 mr-2" /> Filtros{" "}
                     {hasActiveFilters && (
                       <span className="ml-1 w-2 h-2 rounded-full bg-[#CCFF00]" />
                     )}
@@ -490,7 +409,7 @@ export function FinancePage() {
                 >
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label className="text-white/70">Tipo</Label>
+                      <Label>Tipo</Label>
                       <Select
                         value={filterType}
                         onValueChange={(val: any) => setFilterType(val)}
@@ -505,9 +424,8 @@ export function FinancePage() {
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="space-y-2">
-                      <Label className="text-white/70">Categoria</Label>
+                      <Label>Categoria</Label>
                       <Select
                         value={filterCategory}
                         onValueChange={setFilterCategory}
@@ -525,100 +443,87 @@ export function FinancePage() {
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-2">
-                        <Label className="text-white/70 text-xs">De</Label>
-                        <Input
-                          type="date"
-                          className="bg-black/40 border-white/10 text-white h-9 text-xs"
-                          value={filterDateStart}
-                          onChange={(e) => setFilterDateStart(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-white/70 text-xs">Até</Label>
-                        <Input
-                          type="date"
-                          className="bg-black/40 border-white/10 text-white h-9 text-xs"
-                          value={filterDateEnd}
-                          onChange={(e) => setFilterDateEnd(e.target.value)}
-                        />
-                      </div>
+                      <Input
+                        type="date"
+                        className="bg-black/40 border-white/10 text-white h-9 text-xs"
+                        value={filterDateStart}
+                        onChange={(e) => setFilterDateStart(e.target.value)}
+                      />
+                      <Input
+                        type="date"
+                        className="bg-black/40 border-white/10 text-white h-9 text-xs"
+                        value={filterDateEnd}
+                        onChange={(e) => setFilterDateEnd(e.target.value)}
+                      />
                     </div>
-
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-2">
-                        <Label className="text-white/70 text-xs">
-                          Valor Mín.
-                        </Label>
-                        <Input
-                          type="number"
-                          placeholder="0"
-                          className="bg-black/40 border-white/10 text-white h-9 text-xs"
-                          value={filterMinVal}
-                          onChange={(e) => setFilterMinVal(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-white/70 text-xs">
-                          Valor Máx.
-                        </Label>
-                        <Input
-                          type="number"
-                          placeholder="Max"
-                          className="bg-black/40 border-white/10 text-white h-9 text-xs"
-                          value={filterMaxVal}
-                          onChange={(e) => setFilterMaxVal(e.target.value)}
-                        />
-                      </div>
+                      <Input
+                        type="number"
+                        placeholder="Min"
+                        className="bg-black/40 border-white/10 text-white h-9 text-xs"
+                        value={filterMinVal}
+                        onChange={(e) => setFilterMinVal(e.target.value)}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Max"
+                        className="bg-black/40 border-white/10 text-white h-9 text-xs"
+                        value={filterMaxVal}
+                        onChange={(e) => setFilterMaxVal(e.target.value)}
+                      />
                     </div>
-
                     {hasActiveFilters && (
                       <Button
                         variant="ghost"
-                        className="w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 text-xs"
+                        className="w-full text-red-400 h-8 text-xs"
                         onClick={clearFilters}
                       >
-                        <X className="w-3 h-3 mr-1" /> Limpar Filtros
+                        <X className="w-3 h-3 mr-1" /> Limpar
                       </Button>
                     )}
                   </div>
                 </PopoverContent>
               </Popover>
             </div>
-
-            {/* Chips de Filtro Ativo (Opcional - Visualização Rápida) */}
-            {hasActiveFilters && (
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
-                {filterType !== "all" && (
-                  <span className="text-xs px-2 py-1 bg-white/10 rounded-full text-white/70">
-                    Tipo: {filterType === "income" ? "Receita" : "Despesa"}
-                  </span>
-                )}
-                {filterCategory !== "all" && (
-                  <span className="text-xs px-2 py-1 bg-white/10 rounded-full text-white/70">
-                    Cat: {filterCategory}
-                  </span>
-                )}
-                {(filterDateStart || filterDateEnd) && (
-                  <span className="text-xs px-2 py-1 bg-white/10 rounded-full text-white/70">
-                    Data: {filterDateStart || "..."} a {filterDateEnd || "..."}
-                  </span>
-                )}
-                <button
-                  onClick={clearFilters}
-                  className="text-xs text-[#CCFF00] hover:underline ml-auto"
-                >
-                  Limpar tudo
-                </button>
-              </div>
-            )}
           </div>
         )}
 
-        {/* Conteúdo da Aba 1: Transações */}
-        <TabsContent value="transactions" className="mt-0">
+        <TabsContent value="transactions" className="mt-0 relative">
+          {/* BARRA FLUTUANTE DE AÇÕES EM MASSA */}
+          {selectedIds.length > 0 && (
+            <div className="fixed bottom-24 md:bottom-10 left-1/2 -translate-x-1/2 z-50 glass-heavy border border-[#CCFF00]/30 rounded-full px-6 py-3 shadow-[0_0_50px_rgba(204,255,0,0.1)] flex items-center gap-4 animate-in slide-in-from-bottom-10">
+              <span className="text-white font-bold text-sm whitespace-nowrap">
+                {selectedIds.length} selecionados
+              </span>
+              <div className="h-6 w-px bg-white/20"></div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-white hover:text-[#CCFF00] hover:bg-white/5"
+                onClick={() => setIsBulkEditOpen(true)}
+              >
+                <Edit2 className="w-4 h-4 mr-2" /> Editar
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                onClick={handleBulkDelete}
+              >
+                <Trash2 className="w-4 h-4 mr-2" /> Excluir
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-white/60 hover:text-white"
+                onClick={() => setSelectedIds([])}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="flex justify-center p-12">
               <Loader2 className="w-8 h-8 text-[#CCFF00] animate-spin" />
@@ -629,7 +534,7 @@ export function FinancePage() {
               <p className="text-white/50">
                 {transactions.length === 0
                   ? "Nenhuma movimentação ainda."
-                  : "Nenhum resultado para os filtros."}
+                  : "Nenhum resultado."}
               </p>
               {hasActiveFilters && (
                 <Button
@@ -646,11 +551,19 @@ export function FinancePage() {
               data={filteredTransactions}
               categories={categories}
               onDelete={TransactionService.deleteTransaction}
+              onEdit={handleOpenEdit}
+              selectedIds={selectedIds}
+              onSelect={handleSelect}
             />
           ) : (
             <TransactionTable
               data={filteredTransactions}
               categories={categories}
+              selectedIds={selectedIds}
+              onSelect={handleSelect}
+              onSelectAll={handleSelectAll}
+              onEdit={handleOpenEdit}
+              onDelete={TransactionService.deleteTransaction}
             />
           )}
         </TabsContent>
@@ -659,6 +572,241 @@ export function FinancePage() {
           <BillsView />
         </TabsContent>
       </Tabs>
+
+      {/* --- MODAL CRIAR / EDITAR (INDIVIDUAL) --- */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="glass-heavy border-white/10 text-white sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>
+              {editingId ? "Editar Transação" : "Nova Transação"}
+            </DialogTitle>
+            <DialogDescription className="text-white/50">
+              {editingId
+                ? "Altere os dados abaixo."
+                : "Preencha os dados abaixo."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-5 py-4">
+            <div className="flex gap-2 p-1 bg-white/5 rounded-lg border border-white/5">
+              <Button
+                type="button"
+                disabled={!!editingId} // <--- BLOQUEIA TROCA DE TIPO NA EDIÇÃO
+                variant="ghost"
+                onClick={() =>
+                  setFormData((p) => ({ ...p, type: "income", category: "" }))
+                }
+                className={`flex-1 transition-all ${
+                  formData.type === "income"
+                    ? "bg-[#CCFF00] text-black shadow-lg font-bold"
+                    : "text-white/60"
+                } ${!!editingId ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                Receita
+              </Button>
+              <Button
+                type="button"
+                disabled={!!editingId} // <--- BLOQUEIA TROCA DE TIPO NA EDIÇÃO
+                variant="ghost"
+                onClick={() =>
+                  setFormData((p) => ({ ...p, type: "expense", category: "" }))
+                }
+                className={`flex-1 transition-all ${
+                  formData.type === "expense"
+                    ? "bg-red-500 text-white shadow-lg font-bold"
+                    : "text-white/60"
+                } ${!!editingId ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                Despesa
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <div className="relative">
+                <AlignLeft className="absolute left-3 top-2.5 h-4 w-4 text-white/40" />
+                <Input
+                  className="pl-9 bg-black/40 border-white/10 text-white"
+                  value={formData.description}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Valor</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-white/40" />
+                  <Input
+                    type="number"
+                    className="pl-9 bg-black/40 border-white/10 text-white"
+                    value={formData.amount}
+                    onChange={(e) =>
+                      setFormData({ ...formData, amount: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Data</Label>
+                <Input
+                  type="date"
+                  className="bg-black/40 border-white/10 text-white"
+                  value={formData.date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, date: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select
+                value={formData.category}
+                onValueChange={(v) => setFormData({ ...formData, category: v })}
+              >
+                <SelectTrigger className="bg-black/40 border-white/10 text-white">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0a0a0a] border-white/10 text-white">
+                  {availableCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {!editingId && (
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="keepOpen"
+                  checked={keepOpen}
+                  onChange={(e) => setKeepOpen(e.target.checked)}
+                  className="w-4 h-4 rounded border-white/20 bg-white/5 accent-[#CCFF00]"
+                />
+                <Label
+                  htmlFor="keepOpen"
+                  className="text-sm text-white/60 flex items-center gap-1"
+                >
+                  <Repeat className="w-3 h-3" /> Continuar adicionando
+                </Label>
+              </div>
+            )}
+          </div>
+          {showSuccess && (
+            <div className="mb-3 p-2 rounded-lg bg-[#CCFF00]/10 border border-[#CCFF00]/20 flex items-center justify-center gap-2 text-[#CCFF00] text-sm">
+              <Check className="w-4 h-4" /> Salvo com sucesso!
+            </div>
+          )}
+          <Button
+            onClick={handleSave}
+            disabled={isSubmitting}
+            className="w-full bg-[#CCFF00] text-black font-bold"
+          >
+            {isSubmitting
+              ? "Salvando..."
+              : editingId
+              ? "Salvar Alterações"
+              : keepOpen
+              ? "Salvar e Continuar"
+              : "Salvar"}
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL EDIÇÃO EM MASSA (BULK) --- */}
+      <Dialog open={isBulkEditOpen} onOpenChange={setIsBulkEditOpen}>
+        <DialogContent className="glass-heavy border-white/10 text-white sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edição em Massa</DialogTitle>
+            <DialogDescription>
+              Alterando {selectedIds.length} itens selecionados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Campo para alterar</Label>
+              <Select
+                value={bulkEditField}
+                onValueChange={(v: any) => {
+                  setBulkEditField(v);
+                  setBulkEditValue("");
+                }}
+              >
+                <SelectTrigger className="bg-black/40 border-white/10 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0a0a0a] border-white/10 text-white">
+                  <SelectItem value="category">Categoria</SelectItem>
+                  <SelectItem value="date">Data</SelectItem>
+                  <SelectItem value="amount">Valor</SelectItem>
+                  <SelectItem value="description">Descrição</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Novo Valor</Label>
+
+              {bulkEditField === "category" ? (
+                /* VALIDAÇÃO DE CATEGORIA MISTA */
+                hasMixedTypes ? (
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-200">
+                      Você selecionou receitas e despesas juntas. Para alterar a
+                      categoria em massa, selecione apenas itens do mesmo tipo.
+                    </p>
+                  </div>
+                ) : (
+                  <Select
+                    value={bulkEditValue}
+                    onValueChange={setBulkEditValue}
+                  >
+                    <SelectTrigger className="bg-black/40 border-white/10 text-white">
+                      <SelectValue placeholder="Selecione a categoria" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0a0a0a] border-white/10 text-white">
+                      {bulkEditCategories.map((c) => (
+                        <SelectItem key={c.id} value={c.name}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )
+              ) : bulkEditField === "date" ? (
+                <Input
+                  type="date"
+                  className="bg-black/40 border-white/10 text-white"
+                  value={bulkEditValue}
+                  onChange={(e) => setBulkEditValue(e.target.value)}
+                />
+              ) : (
+                <Input
+                  className="bg-black/40 border-white/10 text-white"
+                  placeholder="Digite o novo valor"
+                  type={bulkEditField === "amount" ? "number" : "text"}
+                  value={bulkEditValue}
+                  onChange={(e) => setBulkEditValue(e.target.value)}
+                />
+              )}
+            </div>
+
+            <Button
+              onClick={handleBulkUpdate}
+              disabled={
+                isSubmitting || (bulkEditField === "category" && hasMixedTypes)
+              }
+              className="w-full bg-[#CCFF00] text-black font-bold disabled:opacity-50"
+            >
+              Aplicar a todos
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
